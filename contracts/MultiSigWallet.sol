@@ -7,6 +7,9 @@ contract MultiSigWallet {
     mapping (uint => Transaction) private _transactions;
     uint[] private _pendingTransactions;
 
+    // ----------> I added this in. not sure what withdraw() is used for without this
+    mapping (address => uint256) balances;
+
     // auto incrememnting transaction ID
     uint private _transactionIndex;
     // constant: we need x amount of signatures to sign Transaction
@@ -49,11 +52,13 @@ contract MultiSigWallet {
     /// @dev add new owner to have access, enables the ability to create more than one owner to manage the wallet
     function addOwner(address newOwner) isOwner public {
       //YOUR CODE HERE
+      _owners[newOwner] = 1;
     }
 
     /// @dev remove suspicious owners
     function removeOwner(address existingOwner) isOwner public {
       //YOUR CODE HERE
+      _owners[existingOwner] = 0;
     }
 
     /// @dev Fallback function, which accepts ether when sent to contract
@@ -62,9 +67,12 @@ contract MultiSigWallet {
     }
 
     function withdraw(uint amount) public {
-      require(address(this).balance >= value);
+      require(address(this).balance >= amount);
       //YOUR CODE HERE
+      uint256 amt = balances[msg.sender];
+      balances[msg.sender] -= amt;
 
+      msg.sender.transfer(amt);
     }
 
     /// @dev Send ether to specific a transaction
@@ -78,29 +86,33 @@ contract MultiSigWallet {
     function transferTo(address destination, uint value) validOwner public {
       require(address(this).balance >= value);
       //YOUR CODE HERE
+      Transaction memory transaction;
 
       //create the transaction
       //YOUR CODE HERE
-
-
-
-
+      transaction.value = value;
+      transaction.source = msg.sender;
+      transaction.destination = destination;
+      // signature count and mapping set to default values
 
       //add transaction to the data structures
       //YOUR CODE HERE
-
+      _transactions[_transactionIndex] = transaction;
 
       //log that the transaction was created to a specific address
       //YOUR CODE HERE
+      TransactionCreated(msg.sender, destination, value, _transactionIndex);
+      _transactionIndex += 1;
     }
 
     //returns pending transcations
     function getPendingTransactions() constant validOwner public returns (uint[]) {
       //YOUR CODE HERE
+      return _pendingTransactions;
     }
 
     /// @dev Allows an owner to confirm a transaction.
-    /// @param transactionId Transaction ID.
+    /// @param transactionID Transaction ID.
     /// Sign and Execute transaction.
     function signTransaction(uint transactionID) validOwner public {
       //Use Transaction Structure. Above in TransferTo function, because
@@ -111,36 +123,46 @@ contract MultiSigWallet {
 
       //Create variable transaction using storage (which creates a reference point)
       //YOUR CODE HERE
+      Transaction storage transaction = _transactions[transactionID];
 
       // Transaction must exist, note: use require(), but can't do require(transaction), .
       //YOUR CODE HERE
+      require(transaction.source != address(0));
 
       // Creator cannot sign the transaction, use require()
       //YOUR CODE HERE
+      require(msg.sender != transaction.source);
 
       // Cannot sign a transaction more than once, use require()
       //YOUR CODE HERE
+      require(transaction.signatures[msg.sender] != 1);
 
       // assign the transaction = 1, so that when the function is called again it will fail
       //YOUR CODE HERE
+      transaction.signatures[msg.sender] = 1;
 
       // increment signatureCount
       //YOUR CODE HERE
+      transaction.signatureCount += 1;
 
       // log transaction
       //YOUR CODE HERE
+      TransactionSigned(msg.sender, transactionID);
 
       //  check to see if transaction has enough signatures so that it can actually be completed
       // if true, make the transaction. Don't forget to log the transaction was completed.
       if (transaction.signatureCount >= MIN_SIGNATURES) {
         require(address(this).balance >= transaction.value); //validate transaction
         //YOUR CODE HERE
+        balances[msg.sender] = transaction.value;
 
         //log that the transaction was complete
         //YOUR CODE HERE
+        TransactionCompleted(transaction.source, transaction.destination,
+                             transaction.value, transactionID);
 
         //end with a call to deleteTransaction
-        deleteTransaction(transactionId);
+        deleteTransaction(transactionID);
       }
     }
 
@@ -162,6 +184,11 @@ contract MultiSigWallet {
     /// @return Returns balance
     function walletBalance() constant public returns (uint) {
       //YOUR CODE HERE
-    }
+      uint256 bal = 0;
+      for(uint i = 0; i < _pendingTransactions.length; i++) {
+        bal = bal + _transactions[i].value;
+      }
 
+      return bal;
+    }
  }
